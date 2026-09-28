@@ -1,0 +1,1708 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl" class="h-full select-none">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>סערה בגינה: מסע 5 השלבים!</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:ital,wght@0,400;0,600;0,700;0,800;0,900;1,700&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: 'Rubik', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+            overflow: hidden;
+            color: #fff;
+            touch-action: manipulation;
+        }
+        #gameCanvas {
+            background: #143512;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.9), inset 0 0 120px rgba(0,0,0,0.6);
+            border-radius: 24px;
+            touch-action: none;
+        }
+        
+        .plant-card {
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            touch-action: manipulation;
+            cursor: pointer;
+        }
+        .plant-card:hover {
+            transform: scale(1.05) translateX(-3px);
+            border-color: #38bdf8;
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+        }
+        .plant-card.selected {
+            transform: scale(1.08) translateX(-5px);
+            border-color: #f59e0b !important;
+            box-shadow: 0 0 25px rgba(245, 158, 11, 0.9), inset 0 0 12px rgba(245, 158, 11, 0.5);
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        }
+        .plant-card.cooldown {
+            opacity: 0.4;
+            pointer-events: none;
+            filter: grayscale(85%);
+        }
+        .cooldown-overlay {
+            transition: height 0.1s linear;
+        }
+
+        .scrollable-plant-sidebar {
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+            scrollbar-color: #f59e0b #0f172a;
+        }
+        .scrollable-plant-sidebar::-webkit-scrollbar {
+            width: 5px;
+        }
+        .scrollable-plant-sidebar::-webkit-scrollbar-thumb {
+            background: #f59e0b;
+            border-radius: 999px;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.88);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        @keyframes sunGlow {
+            0%, 100% { filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.8)); }
+            50% { filter: drop-shadow(0 0 28px rgba(251, 191, 36, 1)); }
+        }
+        .sun-icon-glow {
+            animation: sunGlow 2.5s infinite ease-in-out;
+        }
+
+        .pulse-subtle {
+            animation: pulseSubtle 2s infinite ease-in-out;
+        }
+        @keyframes pulseSubtle {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.03); }
+        }
+    </style>
+</head>
+<body class="flex flex-col h-full justify-between items-center p-2 overflow-hidden">
+
+    <div class="app-container flex flex-col w-full h-full max-w-7xl justify-between items-center gap-1.5">
+
+        <!-- Top Navigation Header -->
+        <header class="top-bar w-full flex items-center justify-between glass-panel px-4 py-2 rounded-2xl z-20 shadow-2xl shrink-0">
+            <!-- Sun Balance Display -->
+            <div class="flex items-center gap-2.5 bg-slate-950/90 px-4 py-1.5 rounded-xl border border-amber-500/70 shadow-inner">
+                <span class="text-2xl sm:text-3xl sun-icon-glow animate-spin" style="animation-duration: 12s;">☀️</span>
+                <span id="sun-count" class="text-xl sm:text-3xl font-black text-amber-400 tracking-wider">150</span>
+            </div>
+
+            <!-- Game Title & Stage Status -->
+            <div class="text-center font-black text-sm sm:text-xl text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-amber-300 tracking-wide drop-shadow flex items-center gap-2">
+                <span>סערה בגינה 🌻</span>
+                <span class="hidden sm:inline text-slate-500">|</span>
+                <span id="stage-progress-text" class="text-amber-300 text-xs sm:text-base font-extrabold">שלב 1 מתוך 5</span>
+                <span id="difficulty-badge" class="px-2 py-0.5 rounded-md text-[10px] sm:text-xs bg-emerald-900/80 text-emerald-300 border border-emerald-500/50">קל</span>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button id="sound-btn" onclick="toggleSound()" class="p-2 bg-slate-800/90 hover:bg-slate-700 rounded-xl text-base sm:text-lg transition active:scale-95 border border-slate-700 shadow" title="צליל">
+                    🔊
+                </button>
+                <button id="pause-btn" onclick="togglePause()" class="p-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-base sm:text-lg font-bold transition active:scale-95 border border-amber-400/80 shadow" title="השהה">
+                    ⏸️
+                </button>
+            </div>
+        </header>
+
+        <div id="boss-hp-container" class="w-full max-w-3xl glass-panel border-2 border-red-600/90 p-2 rounded-2xl hidden z-20 shadow-2xl pulse-subtle shrink-0">
+            <div class="flex justify-between items-center mb-1 px-1">
+                <span id="boss-name-title" class="text-xs sm:text-base font-black text-red-400 flex items-center gap-2 drop-shadow">
+                    🏴‍☠️ בוס: פיראט זומבי!
+                </span>
+                <span id="boss-hp-text" class="text-xs sm:text-sm font-black text-red-300">1800 / 1800</span>
+            </div>
+            <div class="w-full bg-slate-950 h-4 rounded-full overflow-hidden p-0.5 border border-red-900/80 shadow-inner">
+                <div id="boss-hp-bar" class="h-full bg-gradient-to-r from-red-600 via-orange-500 to-yellow-400 rounded-full transition-all duration-200 w-full shadow-lg"></div>
+            </div>
+        </div>
+
+        <main class="relative flex-1 w-full h-full flex flex-row items-center justify-between gap-2.5 overflow-hidden min-h-0" style="direction: ltr;">
+            
+            <!-- Left Side Compact Plant Shop Panel -->
+            <aside class="w-22 sm:w-28 h-full glass-panel p-2 rounded-2xl z-20 shadow-2xl shrink-0 flex flex-col justify-start items-center overflow-y-auto scrollable-plant-sidebar gap-2" style="direction: rtl;">
+                <div class="text-[11px] font-black text-amber-400 text-center mb-0.5 border-b border-slate-800 w-full pb-1 tracking-wider">
+                    חנות צמחים
+                </div>
+
+                <button data-plant="sunflower" onclick="selectPlant('sunflower')" class="plant-card relative w-full flex flex-col items-center bg-slate-950/90 border-2 border-slate-700/80 p-1.5 rounded-xl shadow">
+                    <span class="text-xl sm:text-2xl mb-0.5">🌻</span>
+                    <span class="text-[10px] font-bold text-slate-200">חמנית</span>
+                    <span class="text-[11px] font-black text-amber-400">☀️50</span>
+                    <div class="cooldown-overlay absolute inset-0 bg-slate-950/85 rounded-xl h-0 bottom-0 top-auto pointer-events-none"></div>
+                </button>
+
+                <button data-plant="peashooter" onclick="selectPlant('peashooter')" class="plant-card relative w-full flex flex-col items-center bg-slate-950/90 border-2 border-slate-700/80 p-1.5 rounded-xl shadow">
+                    <span class="text-xl sm:text-2xl mb-0.5">🌱</span>
+                    <span class="text-[10px] font-bold text-slate-200">יורק עלים</span>
+                    <span class="text-[11px] font-black text-amber-400">☀️100</span>
+                    <div class="cooldown-overlay absolute inset-0 bg-slate-950/85 rounded-xl h-0 bottom-0 top-auto pointer-events-none"></div>
+                </button>
+
+                <button data-plant="freezer" onclick="selectPlant('freezer')" class="plant-card relative w-full flex flex-col items-center bg-slate-950/90 border-2 border-slate-700/80 p-1.5 rounded-xl shadow">
+                    <span class="text-xl sm:text-2xl mb-0.5">🐞</span>
+                    <span class="text-[10px] font-bold text-slate-200">חיפושית</span>
+                    <span class="text-[11px] font-black text-amber-400">☀️125</span>
+                    <div class="cooldown-overlay absolute inset-0 bg-slate-950/85 rounded-xl h-0 bottom-0 top-auto pointer-events-none"></div>
+                </button>
+
+                <button data-plant="spikemine" onclick="selectPlant('spikemine')" class="plant-card relative w-full flex flex-col items-center bg-slate-950/90 border-2 border-slate-700/80 p-1.5 rounded-xl shadow">
+                    <span class="text-xl sm:text-2xl mb-0.5">💥</span>
+                    <span class="text-[10px] font-bold text-slate-200">מוקש</span>
+                    <span class="text-[11px] font-black text-amber-400">☀️75</span>
+                    <div class="cooldown-overlay absolute inset-0 bg-slate-950/85 rounded-xl h-0 bottom-0 top-auto pointer-events-none"></div>
+                </button>
+
+                <button data-plant="wallnut" onclick="selectPlant('wallnut')" class="plant-card relative w-full flex flex-col items-center bg-slate-950/90 border-2 border-slate-700/80 p-1.5 rounded-xl shadow">
+                    <span class="text-xl sm:text-2xl mb-0.5">🛡️</span>
+                    <span class="text-[10px] font-bold text-slate-200">חומה כתומה</span>
+                    <span class="text-[11px] font-black text-amber-400">☀️50</span>
+                    <div class="cooldown-overlay absolute inset-0 bg-slate-950/85 rounded-xl h-0 bottom-0 top-auto pointer-events-none"></div>
+                </button>
+
+                <button data-plant="shovel" onclick="selectPlant('shovel')" class="plant-card relative w-full flex flex-col items-center bg-slate-950/90 border-2 border-slate-700/80 p-1.5 rounded-xl shadow mt-auto">
+                    <span class="text-xl sm:text-2xl mb-0.5">🧹</span>
+                    <span class="text-[10px] font-bold text-slate-200">מעדר</span>
+                    <span class="text-[10px] font-black text-emerald-400">פינוי</span>
+                </button>
+            </aside>
+
+            <div class="relative flex-1 h-full flex items-center justify-center overflow-hidden min-w-0" style="direction: rtl;">
+                <canvas id="gameCanvas" class="max-w-full max-h-full object-contain shadow-2xl"></canvas>
+
+                <!-- Stage Status Overlay in Bottom Right Corner -->
+                <div class="absolute bottom-3 right-3 glass-panel px-3.5 py-2 rounded-2xl shadow-2xl z-15 pointer-events-none flex flex-col items-end border border-amber-500/50">
+                    <div id="stage-title-hud" class="text-[11px] sm:text-xs font-black text-amber-300">שלב 1 מתוך 5</div>
+                    <div id="stage-kills-hud" class="text-xs sm:text-sm font-black text-emerald-400">חוסלו: 0/15</div>
+                </div>
+
+                <!-- Stage Announcement Banner -->
+                <div id="wave-banner" class="absolute inset-x-0 top-1/3 py-4 bg-gradient-to-r from-amber-600/95 via-orange-500/95 to-amber-600/95 backdrop-blur-md text-slate-950 font-black text-2xl sm:text-4xl text-center shadow-2xl transition-all duration-500 opacity-0 pointer-events-none scale-90 z-25 border-y-4 border-amber-300 drop-shadow-lg">
+                    <div id="wave-banner-text">שלב 1 מתחיל! 🧟‍♂️</div>
+                </div>
+
+                <div id="start-screen" class="absolute inset-0 bg-slate-950/95 backdrop-blur-md rounded-2xl flex flex-col items-center justify-center text-center p-4 z-30 overflow-y-auto border border-slate-800">
+                    <div class="text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-amber-300 to-orange-500 mb-2 drop-shadow">
+                        סערה בגינה: 5 השלבים!
+                    </div>
+                    <div class="text-xs sm:text-sm font-bold text-slate-300 mb-3 max-w-xl">
+                        עבור 5 שלבים מאתגרים מול פיראט זומבי, רובוט מחשמל, רובוט ענקי ורובוט עצום! ☀️🧟‍♂️
+                    </div>
+
+                    <!-- Difficulty Selection Boxes -->
+                    <div class="w-full max-w-xl grid grid-cols-2 gap-3 mb-4 text-right">
+                        <div id="opt-easy" onclick="setDifficulty('easy')" class="cursor-pointer border-2 border-emerald-500/80 bg-slate-900/90 hover:bg-slate-800 p-3 rounded-2xl transition shadow-xl">
+                            <div class="flex items-center gap-1.5 mb-1">
+                                <span class="text-xl">🟢</span>
+                                <span class="font-black text-emerald-400 text-sm sm:text-base">רמה קלה (Easy)</span>
+                            </div>
+                            <div class="text-slate-300 text-[11px] sm:text-xs leading-relaxed">
+                                • תחמושת בלתי מוגבלת לצמחים.<br>
+                                • חוויית משחק קלאסית וזורמת.
+                            </div>
+                        </div>
+
+                        <div id="opt-medium" onclick="setDifficulty('medium')" class="cursor-pointer border-2 border-slate-700 bg-slate-900/60 hover:bg-slate-800 p-3 rounded-2xl transition shadow-xl">
+                            <div class="flex items-center gap-1.5 mb-1">
+                                <span class="text-xl">🟠</span>
+                                <span class="font-black text-amber-400 text-sm sm:text-base">רמה בינונית (Medium)</span>
+                            </div>
+                            <div class="text-slate-300 text-[11px] sm:text-xs leading-relaxed">
+                                • **עד 50 יריות** לכל צמח יורה.<br>
+                                • יש לפנות צמחים ריקים בעזרת המעדר (`🧹`).
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-900/90 border-2 border-amber-500/50 p-3 rounded-2xl max-w-xl mb-4 text-right shadow-2xl w-full">
+                        <div class="text-amber-400 font-black text-xs sm:text-sm mb-1.5">
+                            🗺️ מפת 5 השלבים והבוסים:
+                        </div>
+                        <div class="grid grid-cols-5 gap-1 text-[10px] sm:text-xs text-center font-bold">
+                            <div class="bg-slate-800/80 p-1.5 rounded-lg border border-slate-700">שלב 1<br><span class="text-emerald-400">זומבים</span></div>
+                            <div class="bg-slate-800/80 p-1.5 rounded-lg border border-slate-700">שלב 2<br><span class="text-amber-300">🏴‍☠️ פיראט</span></div>
+                            <div class="bg-slate-800/80 p-1.5 rounded-lg border border-slate-700">שלב 3<br><span class="text-cyan-300">⚡ מחשמל (-5)</span></div>
+                            <div class="bg-slate-800/80 p-1.5 rounded-lg border border-slate-700">שלב 4<br><span class="text-orange-400">🤖 ענקי (-40)</span></div>
+                            <div class="bg-slate-800/80 p-1.5 rounded-lg border border-slate-700">שלב 5<br><span class="text-red-400">☠️ עצום (מכה!)</span></div>
+                        </div>
+                    </div>
+
+                    <button onclick="startGame()" class="px-8 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-lg sm:text-2xl rounded-2xl shadow-2xl transform active:scale-95 transition border-2 border-emerald-300">
+                        🚀 התחל משחק!
+                    </button>
+                </div>
+
+                <div id="victory-screen" class="absolute inset-0 bg-slate-950/95 backdrop-blur-md rounded-2xl flex flex-col items-center justify-center text-center p-4 z-30 hidden">
+                    <div class="text-5xl sm:text-7xl mb-2 animate-bounce">🏆👑🎉</div>
+                    <div class="text-3xl sm:text-5xl font-black text-amber-400 mb-2">
+                        ניצחת את כל 5 השלבים!
+                    </div>
+                    <p class="text-slate-300 mb-5 text-xs sm:text-lg max-w-md">
+                        השמדת את הרובוט העצום והצלת את הגינה לחלוטין!
+                    </p>
+                    <div class="flex items-center gap-3">
+                        <button onclick="quickRestart()" class="px-6 py-3 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-base sm:text-xl rounded-2xl shadow-2xl transform active:scale-95 transition">
+                            🔄 שחק שוב
+                        </button>
+                        <button onclick="goToMainMenu()" class="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold text-base rounded-2xl border border-slate-600 shadow-xl transition active:scale-95">
+                            🏠 תפריט ראשי
+                        </button>
+                    </div>
+                </div>
+
+                <div id="gameover-screen" class="absolute inset-0 bg-slate-950/95 backdrop-blur-md rounded-2xl flex flex-col items-center justify-center text-center p-4 z-30 hidden">
+                    <div class="text-5xl sm:text-7xl mb-2 animate-pulse">🧟‍♂️🧠💀</div>
+                    <div class="text-3xl sm:text-5xl font-black text-red-500 mb-2">
+                        הזומבים כבשו את הגינה!
+                    </div>
+                    <p id="gameover-desc" class="text-slate-300 mb-5 text-xs sm:text-lg max-w-md">
+                        הזומבים או הבוס הצליחו לחדור. נסה להשתמש בשילובי צמחים!
+                    </p>
+                    <div class="flex items-center gap-3">
+                        <button onclick="quickRestart()" class="px-6 py-3 bg-gradient-to-r from-red-600 to-rose-500 hover:from-red-500 hover:to-rose-400 text-white font-black text-base sm:text-xl rounded-2xl shadow-2xl transform active:scale-95 transition">
+                            🔄 נסה שוב
+                        </button>
+                        <button onclick="goToMainMenu()" class="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold text-base rounded-2xl border border-slate-600 shadow-xl transition active:scale-95">
+                            🏠 תפריט ראשי
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            playSun() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, now);
+                osc.frequency.exponentialRampToValueAtTime(1046.50, now + 0.18);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.18);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.18);
+            }
+
+            playShoot() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(480, now);
+                osc.frequency.exponentialRampToValueAtTime(120, now + 0.08);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            }
+
+            playElectricZap() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(1200, now);
+                osc.frequency.linearRampToValueAtTime(200, now + 0.25);
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            }
+
+            playSmash() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(30, now + 0.4);
+                gain.gain.setValueAtTime(0.5, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.4);
+            }
+
+            playFusion() {
+                if (this.muted || !this.ctx) return;
+                const notes = [261.63, 329.63, 392.00, 523.25, 659.25, 783.99];
+                notes.forEach((freq, i) => {
+                    const now = this.ctx.currentTime + i * 0.05;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, now);
+                    gain.gain.setValueAtTime(0.25, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.15);
+                });
+            }
+
+            playPlanting() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(220, now);
+                osc.frequency.exponentialRampToValueAtTime(480, now + 0.12);
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.12);
+            }
+
+            playVictory() {
+                if (this.muted || !this.ctx) return;
+                const notes = [261.63, 329.63, 392.00, 523.25, 659.25];
+                notes.forEach((freq, i) => {
+                    const now = this.ctx.currentTime + i * 0.12;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now);
+                    gain.gain.setValueAtTime(0.25, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                });
+            }
+
+            playGameOver() {
+                if (this.muted || !this.ctx) return;
+                const notes = [380, 320, 260, 180];
+                notes.forEach((freq, i) => {
+                    const now = this.ctx.currentTime + i * 0.18;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(freq, now);
+                    gain.gain.setValueAtTime(0.22, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.35);
+                });
+            }
+        }
+
+        const sound = new SoundEngine();
+
+        const ROWS = 5;
+        const COLS = 8;
+        const CANVAS_WIDTH = 1100;
+        const CANVAS_HEIGHT = 650;
+
+        const GRID_OFFSET_X = 110;
+        const GRID_OFFSET_Y = 85;
+        const CELL_WIDTH = 110;
+        const CELL_HEIGHT = 100;
+
+        const TOTAL_STAGES = 5;
+        const STAGE_KILLS_TARGET = [15, 20, 25, 30, 35];
+
+        const PLANT_TYPES = {
+            sunflower: { name: 'חמנית', cost: 50, hp: 130, cooldown: 5, icon: '🌻' },
+            peashooter: { name: 'יורק עלים', cost: 100, hp: 160, cooldown: 6, icon: '🌱' },
+            freezer: { name: 'חיפושית', cost: 125, hp: 160, cooldown: 8, icon: '🐞' },
+            spikemine: { name: 'מוקש', cost: 75, hp: 100, cooldown: 10, icon: '💥' },
+            wallnut: { name: 'חומה כתומה', cost: 50, hp: 1000, cooldown: 10, icon: '🛡️' },
+            // Fusions
+            sun_shooter: { name: 'חמנית-קרב', cost: 0, hp: 220, cooldown: 0, icon: '☀️🌻' },
+            cannon_beetle: { name: 'חיפושית פגזים', cost: 0, hp: 240, cooldown: 0, icon: '🐞💥' },
+            green_wall_shooter: { name: 'חומה ירוקה יורת עלים', cost: 0, hp: 1000, cooldown: 0, icon: '🛡️🌱' }
+        };
+
+        let canvas, ctx;
+        let isRunning = false;
+        let isPaused = false;
+        let selectedDifficulty = 'easy';
+        let animFrameId = null;
+
+        let sunCount = 150;
+        let currentStage = 1;
+        let stageKills = 0;
+        let selectedPlant = null;
+        let hoverCell = { row: -1, col: -1 };
+        let lastTime = 0;
+        let globalAnimTime = 0;
+        let zombieSpawnTimer = 0;
+
+        let shakeTime = 0;
+        let shakeIntensity = 0;
+
+        let plants = [];
+        let zombies = [];
+        let projectiles = [];
+        let suns = [];
+        let particles = [];
+        let floatingTexts = [];
+        let ambientPollen = [];
+
+        let cooldowns = {
+            sunflower: 0,
+            peashooter: 0,
+            freezer: 0,
+            spikemine: 0,
+            wallnut: 0
+        };
+
+        let boss = null;
+
+        window.onload = function() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+
+            canvas.width = CANVAS_WIDTH;
+            canvas.height = CANVAS_HEIGHT;
+
+            for (let i = 0; i < 35; i++) {
+                ambientPollen.push({
+                    x: Math.random() * CANVAS_WIDTH,
+                    y: Math.random() * CANVAS_HEIGHT,
+                    vx: (Math.random() - 0.5) * 18,
+                    vy: (Math.random() - 0.5) * 18,
+                    radius: Math.random() * 2.5 + 1,
+                    alpha: Math.random() * 0.5 + 0.2
+                });
+            }
+
+            canvas.addEventListener('pointerdown', handlePointerDown);
+            canvas.addEventListener('pointermove', handlePointerMove);
+
+            renderGame();
+        };
+
+        function setDifficulty(diff) {
+            selectedDifficulty = diff;
+            const easyEl = document.getElementById('opt-easy');
+            const medEl = document.getElementById('opt-medium');
+
+            if (diff === 'easy') {
+                easyEl.className = "cursor-pointer border-2 border-emerald-500/80 bg-slate-900/90 hover:bg-slate-800 p-3 rounded-2xl transition shadow-xl";
+                medEl.className = "cursor-pointer border-2 border-slate-700 bg-slate-900/60 hover:bg-slate-800 p-3 rounded-2xl transition shadow-xl";
+            } else {
+                easyEl.className = "cursor-pointer border-2 border-slate-700 bg-slate-900/60 hover:bg-slate-800 p-3 rounded-2xl transition shadow-xl";
+                medEl.className = "cursor-pointer border-2 border-amber-500/80 bg-slate-900/90 hover:bg-slate-800 p-3 rounded-2xl transition shadow-xl";
+            }
+        }
+
+        function triggerScreenShake(intensity, duration) {
+            shakeIntensity = intensity;
+            shakeTime = duration;
+        }
+
+        function toggleSound() {
+            sound.muted = !sound.muted;
+            document.getElementById('sound-btn').innerText = sound.muted ? '🔇' : '🔊';
+        }
+
+        function togglePause() {
+            if (!isRunning) return;
+            isPaused = !isPaused;
+            document.getElementById('pause-btn').innerText = isPaused ? '▶️' : '⏸️';
+        }
+
+        function getCanvasCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = CANVAS_WIDTH / rect.width;
+            const scaleY = CANVAS_HEIGHT / rect.height;
+            return {
+                x: (e.clientX - rect.left) * scaleX,
+                y: (e.clientY - rect.top) * scaleY
+            };
+        }
+
+        function handlePointerMove(e) {
+            if (!isRunning || isPaused) return;
+            const coords = getCanvasCoords(e);
+            
+            if (coords.x >= GRID_OFFSET_X && coords.x < GRID_OFFSET_X + COLS * CELL_WIDTH &&
+                coords.y >= GRID_OFFSET_Y && coords.y < GRID_OFFSET_Y + ROWS * CELL_HEIGHT) {
+                hoverCell.col = Math.floor((coords.x - GRID_OFFSET_X) / CELL_WIDTH);
+                hoverCell.row = Math.floor((coords.y - GRID_OFFSET_Y) / CELL_HEIGHT);
+            } else {
+                hoverCell.row = -1;
+                hoverCell.col = -1;
+            }
+        }
+
+        function handlePointerDown(e) {
+            if (!isRunning || isPaused) return;
+            sound.init();
+
+            const coords = getCanvasCoords(e);
+            processClickAt(coords.x, coords.y);
+        }
+
+        function processClickAt(x, y) {
+            // Collect Sun
+            for (let i = suns.length - 1; i >= 0; i--) {
+                const s = suns[i];
+                const dist = Math.hypot(x - s.x, y - s.y);
+                if (dist < s.radius + 40) {
+                    sunCount += s.value;
+                    sound.playSun();
+                    createParticles(s.x, s.y, '#f59e0b', 20);
+                    addFloatingText(s.x, s.y, `+${s.value} ☀️`, '#fbbf24');
+                    suns.splice(i, 1);
+                    updateUI();
+                    return;
+                }
+            }
+
+            // Grid Interaction
+            if (x >= GRID_OFFSET_X && x < GRID_OFFSET_X + COLS * CELL_WIDTH &&
+                y >= GRID_OFFSET_Y && y < GRID_OFFSET_Y + ROWS * CELL_HEIGHT) {
+
+                const col = Math.floor((x - GRID_OFFSET_X) / CELL_WIDTH);
+                const row = Math.floor((y - GRID_OFFSET_Y) / CELL_HEIGHT);
+
+                if (selectedPlant === 'shovel') {
+                    const index = plants.findIndex(p => p.row === row && p.col === col);
+                    if (index !== -1) {
+                        createParticles(plants[index].x, plants[index].y, '#10b981', 18);
+                        plants.splice(index, 1);
+                        sound.playPlanting();
+                        selectPlant(null);
+                    }
+                } else if (selectedPlant && PLANT_TYPES[selectedPlant]) {
+                    const pDef = PLANT_TYPES[selectedPlant];
+                    const existingIndex = plants.findIndex(p => p.row === row && p.col === col);
+                    const existing = plants[existingIndex];
+
+                    const centerX = GRID_OFFSET_X + col * CELL_WIDTH + CELL_WIDTH / 2;
+                    const centerY = GRID_OFFSET_Y + row * CELL_HEIGHT + CELL_HEIGHT / 2;
+
+                    let fusionType = null;
+                    if (existing) {
+                        if ((existing.type === 'sunflower' && selectedPlant === 'peashooter') ||
+                            (existing.type === 'peashooter' && selectedPlant === 'sunflower')) {
+                            fusionType = 'sun_shooter';
+                        }
+                        else if ((existing.type === 'freezer' && selectedPlant === 'spikemine') ||
+                                 (existing.type === 'spikemine' && selectedPlant === 'freezer')) {
+                            fusionType = 'cannon_beetle';
+                        }
+                        else if ((existing.type === 'wallnut' && selectedPlant === 'peashooter') ||
+                                 (existing.type === 'peashooter' && selectedPlant === 'wallnut')) {
+                            fusionType = 'green_wall_shooter';
+                        }
+                    }
+
+                    if (fusionType) {
+                        if (sunCount >= pDef.cost && cooldowns[selectedPlant] <= 0) {
+                            sunCount -= pDef.cost;
+                            cooldowns[selectedPlant] = pDef.cooldown;
+
+                            plants.splice(existingIndex, 1);
+                            const fDef = PLANT_TYPES[fusionType];
+
+                            plants.push({
+                                type: fusionType,
+                                row: row,
+                                col: col,
+                                x: centerX,
+                                y: centerY,
+                                hp: fDef.hp,
+                                maxHp: fDef.hp,
+                                timer: 0,
+                                ammo: selectedDifficulty === 'medium' ? 50 : Infinity,
+                                armed: true
+                            });
+
+                            sound.playFusion();
+                            createParticles(centerX, centerY, '#fbbf24', 40);
+                            addFloatingText(centerX, centerY - 25, `שילוב: ${fDef.name}! ✨`, '#f59e0b');
+                            selectPlant(null);
+                            updateUI();
+                        }
+                    } else if (!existing && sunCount >= pDef.cost && cooldowns[selectedPlant] <= 0) {
+                        sunCount -= pDef.cost;
+                        cooldowns[selectedPlant] = pDef.cooldown;
+
+                        plants.push({
+                            type: selectedPlant,
+                            row: row,
+                            col: col,
+                            x: centerX,
+                            y: centerY,
+                            hp: pDef.hp,
+                            maxHp: pDef.hp,
+                            timer: 0,
+                            ammo: selectedDifficulty === 'medium' ? 50 : Infinity,
+                            armed: selectedPlant !== 'spikemine',
+                            armTimer: selectedPlant === 'spikemine' ? 2.2 : 0
+                        });
+
+                        sound.playPlanting();
+                        createParticles(centerX, centerY, '#10b981', 16);
+                        selectPlant(null);
+                        updateUI();
+                    }
+                }
+            }
+        }
+
+        function stopGameLoop() {
+            if (animFrameId) {
+                cancelAnimationFrame(animFrameId);
+                animFrameId = null;
+            }
+            isRunning = false;
+        }
+
+        function resetGameState() {
+            sunCount = 150;
+            currentStage = 1;
+            stageKills = 0;
+            zombieSpawnTimer = 0;
+            plants = [];
+            zombies = [];
+            projectiles = [];
+            suns = [];
+            particles = [];
+            floatingTexts = [];
+            boss = null;
+            selectedPlant = null;
+
+            Object.keys(cooldowns).forEach(k => cooldowns[k] = 0);
+
+            document.getElementById('boss-hp-container').classList.add('hidden');
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('victory-screen').classList.add('hidden');
+            document.getElementById('gameover-screen').classList.add('hidden');
+        }
+
+        function startGame() {
+            sound.init();
+            stopGameLoop();
+            resetGameState();
+
+            document.getElementById('difficulty-badge').innerText = selectedDifficulty === 'easy' ? 'רמה קלה' : 'רמה בינונית';
+            document.getElementById('difficulty-badge').className = selectedDifficulty === 'easy' 
+                ? 'px-2 py-0.5 rounded-md text-[10px] sm:text-xs bg-emerald-900/80 text-emerald-300 border border-emerald-500/50'
+                : 'px-2 py-0.5 rounded-md text-[10px] sm:text-xs bg-amber-900/80 text-amber-300 border border-amber-500/50';
+
+            updateUI();
+
+            isRunning = true;
+            isPaused = false;
+            lastTime = performance.now();
+
+            showWaveBanner(`שלב 1 מתוך ${TOTAL_STAGES} מתחיל! 🧟‍♂️`);
+            spawnSkySun();
+            animFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function quickRestart() {
+            startGame();
+        }
+
+        function goToMainMenu() {
+            stopGameLoop();
+            resetGameState();
+            document.getElementById('start-screen').classList.remove('hidden');
+            renderGame();
+        }
+
+        function selectPlant(type) {
+            selectedPlant = (selectedPlant === type) ? null : type;
+
+            document.querySelectorAll('.plant-card').forEach(card => {
+                if (card.dataset.plant === selectedPlant) {
+                    card.classList.add('selected');
+                } else {
+                    card.classList.remove('selected');
+                }
+            });
+        }
+
+        function showWaveBanner(text) {
+            const banner = document.getElementById('wave-banner');
+            const bannerText = document.getElementById('wave-banner-text');
+            bannerText.innerText = text;
+            banner.classList.remove('opacity-0', 'scale-90', 'pointer-events-none');
+            banner.classList.add('opacity-100', 'scale-100');
+
+            setTimeout(() => {
+                banner.classList.remove('opacity-100', 'scale-100');
+                banner.classList.add('opacity-0', 'scale-90', 'pointer-events-none');
+            }, 2500);
+        }
+
+        function gameLoop(timestamp) {
+            if (!isRunning) return;
+
+            const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+            lastTime = timestamp;
+
+            if (!isPaused) {
+                globalAnimTime += dt;
+                updateGame(dt);
+            }
+
+            renderGame();
+            animFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function updateGame(dt) {
+            if (shakeTime > 0) shakeTime -= dt;
+
+            Object.keys(cooldowns).forEach(key => {
+                if (cooldowns[key] > 0) {
+                    cooldowns[key] = Math.max(0, cooldowns[key] - dt);
+                }
+            });
+
+            handleStageSpawns(dt);
+
+            // Update Plants
+            plants.forEach((plant) => {
+                plant.timer += dt;
+
+                if (plant.type === 'spikemine' && !plant.armed) {
+                    plant.armTimer -= dt;
+                    if (plant.armTimer <= 0) {
+                        plant.armed = true;
+                        createParticles(plant.x, plant.y, '#f97316', 20);
+                    }
+                }
+
+                if ((plant.type === 'sunflower' && plant.timer >= 8.0) || (plant.type === 'sun_shooter' && plant.timer >= 9.0)) {
+                    plant.timer = 0;
+                    suns.push({
+                        x: plant.x + (Math.random() * 20 - 10),
+                        y: plant.y - 15,
+                        targetY: plant.y + 25,
+                        value: 25,
+                        radius: 22,
+                        aliveTime: 0,
+                        rotation: Math.random() * Math.PI * 2
+                    });
+                }
+
+                // Shooting Plants Logic (Peashooter, Sun Shooter, Cannon Beetle, Green Wall)
+                const isShootingType = ['peashooter', 'sun_shooter', 'cannon_beetle', 'freezer', 'green_wall_shooter'].includes(plant.type);
+                
+                if (isShootingType && plant.ammo > 0) {
+                    let fireRate = 1.25;
+                    if (plant.type === 'freezer' || plant.type === 'cannon_beetle') fireRate = 1.7;
+                    if (plant.type === 'sun_shooter') fireRate = 1.1;
+
+                    if (plant.timer >= fireRate) {
+                        const zombieInRow = zombies.some(z => z.row === plant.row && z.x > plant.x);
+                        const bossActiveInRow = boss && boss.active;
+
+                        if (zombieInRow || bossActiveInRow) {
+                            plant.timer = 0;
+                            plant.ammo--;
+
+                            let projType = 'leaf';
+                            let speed = 460;
+                            let damage = 32;
+
+                            if (plant.type === 'sun_shooter') {
+                                projType = 'sun_bullet';
+                                damage = 38;
+                                sound.playShoot();
+                            } else if (plant.type === 'cannon_beetle') {
+                                projType = 'shell';
+                                damage = 80;
+                                sound.playShoot();
+                            } else if (plant.type === 'freezer') {
+                                projType = 'ice';
+                                damage = 26;
+                                sound.playShoot();
+                            } else {
+                                sound.playShoot();
+                            }
+
+                            projectiles.push({
+                                x: plant.x + 28,
+                                y: plant.y - 12,
+                                row: plant.row,
+                                type: projType,
+                                speed: speed,
+                                damage: damage
+                            });
+                        }
+                    }
+                }
+            });
+
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const p = projectiles[i];
+                p.x += p.speed * dt;
+
+                let hit = false;
+
+                if (boss && boss.active && p.x >= boss.x - 70) {
+                    boss.hp -= p.damage;
+                    boss.hitFlash = 0.12;
+                    hit = true;
+
+                    if (p.type === 'sun_bullet') {
+                        sunCount += 20;
+                        sound.playSun();
+                        addFloatingText(p.x, p.y - 30, '+20 ☀️', '#fbbf24');
+                    } else if (p.type === 'shell') {
+                        sound.playSmash();
+                        triggerScreenShake(7, 0.25);
+                        createParticles(p.x, p.y, '#f97316', 30);
+                    }
+
+                    createParticles(p.x, p.y, p.type === 'ice' ? '#38bdf8' : (p.type === 'sun_bullet' ? '#fbbf24' : '#22c55e'), 12);
+                    addFloatingText(p.x, p.y - 12, `-${p.damage}`, '#f43f5e');
+
+                    if (boss.hp <= 0) {
+                        onBossDefeated();
+                    }
+                }
+
+                if (!hit) {
+                    for (let j = zombies.length - 1; j >= 0; j--) {
+                        const z = zombies[j];
+                        if (z.row === p.row && Math.abs(z.x - p.x) < 30) {
+                            hit = true;
+
+                            if (p.type === 'shell') {
+                                sound.playSmash();
+                                triggerScreenShake(6, 0.22);
+                                createParticles(p.x, p.y, '#ea580c', 35);
+
+                                zombies.forEach(zm => {
+                                    if (Math.hypot(zm.x - p.x, zm.y - p.y) < 110) {
+                                        zm.hp -= p.damage;
+                                        zm.hitFlash = 0.14;
+                                        zm.slowTimer = 4.0;
+                                        addFloatingText(zm.x, zm.y - 20, `-${p.damage}`, '#f97316');
+
+                                        if (zm.hp <= 0) {
+                                            stageKills++;
+                                        }
+                                    }
+                                });
+                                zombies = zombies.filter(zm => zm.hp > 0);
+                                checkStageCompletion();
+                            } else {
+                                z.hp -= p.damage;
+                                z.hitFlash = 0.14;
+
+                                if (p.type === 'ice') {
+                                    z.slowTimer = 3.5;
+                                }
+
+                                if (p.type === 'sun_bullet') {
+                                    sunCount += 20;
+                                    sound.playSun();
+                                    addFloatingText(z.x, z.y - 45, '+20 ☀️', '#fbbf24');
+                                }
+
+                                createParticles(p.x, p.y, p.type === 'ice' ? '#38bdf8' : (p.type === 'sun_bullet' ? '#fbbf24' : '#84cc16'), 12);
+                                addFloatingText(p.x, p.y - 25, `-${p.damage}`, '#f43f5e');
+
+                                if (z.hp <= 0) {
+                                    createParticles(z.x, z.y, '#5a8c50', 25);
+                                    zombies.splice(j, 1);
+                                    stageKills++;
+                                    checkStageCompletion();
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if (hit || p.x > CANVAS_WIDTH + 50) {
+                    projectiles.splice(i, 1);
+                }
+            }
+
+            for (let i = zombies.length - 1; i >= 0; i--) {
+                const z = zombies[i];
+                z.walkAnim += dt * 6.5;
+                if (z.hitFlash > 0) z.hitFlash -= dt;
+
+                if (z.slowTimer > 0) z.slowTimer -= dt;
+                const currentSpeed = z.slowTimer > 0 ? z.speed * 0.45 : z.speed;
+
+                const plantAhead = plants.find(p => p.row === z.row && Math.abs(p.x - z.x) < 34);
+
+                if (plantAhead) {
+                    if (plantAhead.type === 'spikemine' && plantAhead.armed) {
+                        sound.playSmash();
+                        triggerScreenShake(8, 0.35);
+                        createParticles(plantAhead.x, plantAhead.y, '#f97316', 45);
+
+                        zombies.forEach(zm => {
+                            if (zm.row === z.row && Math.abs(zm.x - plantAhead.x) < 140) {
+                                zm.hp -= 580;
+                                zm.hitFlash = 0.2;
+                                if (zm.hp <= 0) {
+                                    stageKills++;
+                                }
+                            }
+                        });
+
+                        const pIdx = plants.indexOf(plantAhead);
+                        if (pIdx !== -1) plants.splice(pIdx, 1);
+                        checkStageCompletion();
+                        continue;
+                    }
+
+                    plantAhead.hp -= z.attack * dt;
+                    if (plantAhead.hp <= 0) {
+                        createParticles(plantAhead.x, plantAhead.y, '#10b981', 20);
+                        const pIdx = plants.indexOf(plantAhead);
+                        if (pIdx !== -1) plants.splice(pIdx, 1);
+                    }
+                } else {
+                    z.x -= currentSpeed * dt;
+                }
+
+                if (z.x < GRID_OFFSET_X - 35) {
+                    onGameOver('הזומבים הצליחו לפרוץ לגינה!');
+                    return;
+                }
+            }
+
+            if (boss && boss.active) {
+                if (boss.hitFlash > 0) boss.hitFlash -= dt;
+                boss.attackTimer += dt;
+
+                if (boss.attackTimer >= boss.nextAttackDelay) {
+                    boss.attackTimer = 0;
+
+                    if (boss.type === 'pirate') {
+                        // Stage 2 Pirate Boss
+                        boss.nextAttackDelay = 2.8;
+                        boss.targetRow = Math.floor(Math.random() * ROWS);
+                        plants.forEach(p => {
+                            if (p.row === boss.targetRow) {
+                                p.hp -= 25;
+                                addFloatingText(p.x, p.y - 15, '-25 🗡️', '#ef4444');
+                            }
+                        });
+                        sound.playSmash();
+                        triggerScreenShake(4, 0.2);
+
+                    } else if (boss.type === 'electric') {
+                        // Stage 3 Electric Robot Boss: Exactly 5 damage!
+                        boss.nextAttackDelay = 1.8;
+                        boss.targetRow = Math.floor(Math.random() * ROWS);
+                        plants.forEach(p => {
+                            if (p.row === boss.targetRow) {
+                                p.hp -= 5;
+                                addFloatingText(p.x, p.y - 15, '-5 ⚡', '#38bdf8');
+                            }
+                        });
+                        sound.playElectricZap();
+                        triggerScreenShake(3, 0.15);
+
+                    } else if (boss.type === 'giant') {
+                        // Stage 4 Giant Robot Boss: Exactly 40 damage!
+                        boss.nextAttackDelay = 2.5;
+                        boss.targetRow = Math.floor(Math.random() * ROWS);
+                        plants.forEach(p => {
+                            if (p.row === boss.targetRow && Math.abs(p.x - boss.x) < 400) {
+                                p.hp -= 40;
+                                addFloatingText(p.x, p.y - 15, '-40 💥', '#f97316');
+                            }
+                        });
+                        sound.playSmash();
+                        triggerScreenShake(8, 0.35);
+
+                    } else if (boss.type === 'colossal') {
+                        // Stage 5 Colossal Robot Boss: Instant 1-Hit Kill!
+                        boss.nextAttackDelay = 2.2;
+                        boss.targetRow = Math.floor(Math.random() * ROWS);
+                        const targetPlant = plants.find(p => p.row === boss.targetRow);
+                        if (targetPlant) {
+                            targetPlant.hp = 0;
+                            createParticles(targetPlant.x, targetPlant.y, '#ef4444', 35);
+                            addFloatingText(targetPlant.x, targetPlant.y - 20, '☠️ חיסול במכה!', '#ef4444');
+                        }
+                        sound.playSmash();
+                        triggerScreenShake(12, 0.5);
+                    }
+                }
+
+                plants = plants.filter(p => p.hp > 0);
+            }
+
+            // Update Suns
+            for (let i = suns.length - 1; i >= 0; i--) {
+                const s = suns[i];
+                s.aliveTime += dt;
+                s.rotation += dt * 0.8;
+
+                if (s.y < s.targetY) {
+                    s.y += 70 * dt;
+                }
+
+                if (s.aliveTime > 11.0) {
+                    suns.splice(i, 1);
+                }
+            }
+
+            if (Math.random() < 0.009) {
+                spawnSkySun();
+            }
+
+            // Update Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const pt = particles[i];
+                pt.x += pt.vx * dt;
+                pt.y += pt.vy * dt;
+                pt.life -= dt;
+                if (pt.life <= 0) particles.splice(i, 1);
+            }
+
+            // Update Ambient Pollen
+            ambientPollen.forEach(p => {
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                if (p.x < 0) p.x = CANVAS_WIDTH;
+                if (p.x > CANVAS_WIDTH) p.x = 0;
+                if (p.y < 0) p.y = CANVAS_HEIGHT;
+                if (p.y > CANVAS_HEIGHT) p.y = 0;
+            });
+
+            // Update Floating Text
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                const ft = floatingTexts[i];
+                ft.y -= 30 * dt;
+                ft.life -= dt;
+                if (ft.life <= 0) floatingTexts.splice(i, 1);
+            }
+
+            updateUI();
+        }
+
+        function handleStageSpawns(dt) {
+            zombieSpawnTimer += dt;
+            let spawnDelay = Math.max(1.2, 3.8 - (currentStage * 0.3));
+
+            const targetKills = STAGE_KILLS_TARGET[currentStage - 1];
+
+            if (stageKills < targetKills && zombieSpawnTimer >= spawnDelay) {
+                zombieSpawnTimer = 0;
+                if (zombies.length < 10) {
+                    let type = 'normal';
+                    if (currentStage >= 2 && Math.random() < 0.4) type = 'fast';
+                    if (currentStage >= 3 && Math.random() < 0.3) type = 'bucket';
+
+                    spawnZombie(Math.floor(Math.random() * ROWS), type);
+                }
+            }
+        }
+
+        function checkStageCompletion() {
+            const targetKills = STAGE_KILLS_TARGET[currentStage - 1];
+
+            if (stageKills >= targetKills && zombies.length === 0 && (!boss || !boss.active)) {
+                if (currentStage === 1) {
+                    advanceToNextStage();
+                } else if (!boss) {
+                    spawnStageBoss(currentStage);
+                }
+            }
+        }
+
+        function spawnStageBoss(stageNum) {
+            document.getElementById('boss-hp-container').classList.remove('hidden');
+
+            if (stageNum === 2) {
+                boss = {
+                    type: 'pirate',
+                    name: '🏴‍☠️ בוס: פיראט זומבי!',
+                    hp: 1800,
+                    maxHp: 1800,
+                    x: CANVAS_WIDTH - 130,
+                    y: CANVAS_HEIGHT / 2,
+                    active: true,
+                    attackTimer: 0,
+                    nextAttackDelay: 2.0,
+                    hitFlash: 0
+                };
+                showWaveBanner('🏴‍☠️ בוס שלב 2: פיראט זומבי הגיע!');
+
+            } else if (stageNum === 3) {
+                boss = {
+                    type: 'electric',
+                    name: '⚡🤖 בוס: רובוט מחשמל (-5 נזק)!',
+                    hp: 2800,
+                    maxHp: 2800,
+                    x: CANVAS_WIDTH - 130,
+                    y: CANVAS_HEIGHT / 2,
+                    active: true,
+                    attackTimer: 0,
+                    nextAttackDelay: 1.8,
+                    hitFlash: 0
+                };
+                showWaveBanner('⚡🤖 בוס שלב 3: רובוט מחשמל הגיע!');
+
+            } else if (stageNum === 4) {
+                boss = {
+                    type: 'giant',
+                    name: '🤖💥 בוס: רובוט ענקי (-40 נזק)!',
+                    hp: 4200,
+                    maxHp: 4200,
+                    x: CANVAS_WIDTH - 130,
+                    y: CANVAS_HEIGHT / 2,
+                    active: true,
+                    attackTimer: 0,
+                    nextAttackDelay: 2.5,
+                    hitFlash: 0
+                };
+                showWaveBanner('🤖💥 בוס שלב 4: רובוט ענקי הגיע!');
+
+            } else if (stageNum === 5) {
+                boss = {
+                    type: 'colossal',
+                    name: '🤖☠️ בוס סופי: רובוט עצום (הורג במכה!)',
+                    hp: 6500,
+                    maxHp: 6500,
+                    x: CANVAS_WIDTH - 130,
+                    y: CANVAS_HEIGHT / 2,
+                    active: true,
+                    attackTimer: 0,
+                    nextAttackDelay: 2.2,
+                    hitFlash: 0
+                };
+                showWaveBanner('☠️ בוס שלב 5 הסופי: רובוט עצום שהורג במכה אחת!');
+            }
+
+            document.getElementById('boss-name-title').innerText = boss.name;
+        }
+
+        function onBossDefeated() {
+            boss.active = false;
+            boss = null;
+            document.getElementById('boss-hp-container').classList.add('hidden');
+
+            if (currentStage < TOTAL_STAGES) {
+                advanceToNextStage();
+            } else {
+                onVictory();
+            }
+        }
+
+        function advanceToNextStage() {
+            currentStage++;
+            stageKills = 0;
+            zombies = [];
+            sound.playVictory();
+            showWaveBanner(`✨ שלב ${currentStage - 1} הושלם! עוברים לשלב ${currentStage}/${TOTAL_STAGES}!`);
+        }
+
+        function spawnZombie(row, type) {
+            let hp = 190 + (currentStage * 15);
+            let speed = 28 + (currentStage * 2);
+            let attack = 30;
+
+            if (type === 'fast') {
+                hp = 150 + (currentStage * 12);
+                speed = 52 + (currentStage * 2.5);
+            } else if (type === 'bucket') {
+                hp = 550 + (currentStage * 30);
+                speed = 24 + currentStage;
+            }
+
+            zombies.push({
+                row: row,
+                type: type,
+                x: CANVAS_WIDTH + 40,
+                y: GRID_OFFSET_Y + row * CELL_HEIGHT + CELL_HEIGHT / 2,
+                hp: hp,
+                maxHp: hp,
+                speed: speed,
+                attack: attack,
+                slowTimer: 0,
+                hitFlash: 0,
+                walkAnim: Math.random() * 10
+            });
+        }
+
+        function spawnSkySun() {
+            const randCol = Math.floor(Math.random() * COLS);
+            const startX = GRID_OFFSET_X + randCol * CELL_WIDTH + CELL_WIDTH / 2;
+            const targetY = GRID_OFFSET_Y + Math.floor(Math.random() * ROWS) * CELL_HEIGHT + CELL_HEIGHT / 2;
+
+            suns.push({
+                x: startX,
+                y: -35,
+                targetY: targetY,
+                value: 25,
+                radius: 22,
+                aliveTime: 0,
+                rotation: Math.random() * Math.PI * 2
+            });
+        }
+
+        function addFloatingText(x, y, text, color) {
+            floatingTexts.push({ x, y, text, color, life: 1.0 });
+        }
+
+        function createParticles(x, y, color, count) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 40 + Math.random() * 150;
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    color: color,
+                    size: 3 + Math.random() * 5.5,
+                    life: 0.4 + Math.random() * 0.45
+                });
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('sun-count').innerText = Math.floor(sunCount);
+            document.getElementById('stage-progress-text').innerText = `שלב ${currentStage} מתוך ${TOTAL_STAGES}`;
+            document.getElementById('stage-title-hud').innerText = `שלב ${currentStage} מתוך ${TOTAL_STAGES}`;
+
+            const targetKills = STAGE_KILLS_TARGET[currentStage - 1];
+
+            if (!boss || !boss.active) {
+                document.getElementById('stage-kills-hud').innerText = `חוסלו: ${stageKills}/${targetKills}`;
+            } else {
+                document.getElementById('stage-kills-hud').innerText = `🔥 קרב בוס!`;
+            }
+
+            Object.keys(PLANT_TYPES).forEach(key => {
+                if (key === 'sun_shooter' || key === 'cannon_beetle' || key === 'green_wall_shooter') return;
+                const card = document.querySelector(`.plant-card[data-plant="${key}"]`);
+                if (card) {
+                    const pDef = PLANT_TYPES[key];
+                    const cdOverlay = card.querySelector('.cooldown-overlay');
+                    const cdRatio = cooldowns[key] / pDef.cooldown;
+
+                    if (cdRatio > 0 || sunCount < pDef.cost) {
+                        card.classList.add('cooldown');
+                    } else {
+                        card.classList.remove('cooldown');
+                    }
+
+                    if (cdOverlay) {
+                        cdOverlay.style.height = `${cdRatio * 100}%`;
+                    }
+                }
+            });
+
+            if (boss && boss.active) {
+                const pct = Math.max(0, (boss.hp / boss.maxHp) * 100);
+                document.getElementById('boss-hp-bar').style.width = `${pct}%`;
+                document.getElementById('boss-hp-text').innerText = `${Math.ceil(boss.hp)} / ${boss.maxHp}`;
+            }
+        }
+
+        function onVictory() {
+            stopGameLoop();
+            sound.playVictory();
+            document.getElementById('victory-screen').classList.remove('hidden');
+        }
+
+        function onGameOver(msg) {
+            stopGameLoop();
+            sound.playGameOver();
+            document.getElementById('gameover-desc').innerText = msg || 'הזומבים הצליחו לפרוץ את הגנות הגינה!';
+            document.getElementById('gameover-screen').classList.remove('hidden');
+        }
+
+        function renderGame() {
+            ctx.save();
+
+            if (shakeTime > 0) {
+                const rx = (Math.random() - 0.5) * shakeIntensity;
+                const ry = (Math.random() - 0.5) * shakeIntensity;
+                ctx.translate(rx, ry);
+            }
+
+            ctx.fillStyle = '#0f2b0d';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const isEven = (r + c) % 2 === 0;
+                    const cellX = GRID_OFFSET_X + c * CELL_WIDTH;
+                    const cellY = GRID_OFFSET_Y + r * CELL_HEIGHT;
+
+                    const grassGrad = ctx.createLinearGradient(cellX, cellY, cellX + CELL_WIDTH, cellY + CELL_HEIGHT);
+                    if (isEven) {
+                        grassGrad.addColorStop(0, '#266122');
+                        grassGrad.addColorStop(1, '#1e501a');
+                    } else {
+                        grassGrad.addColorStop(0, '#1f531c');
+                        grassGrad.addColorStop(1, '#184415');
+                    }
+
+                    ctx.fillStyle = grassGrad;
+                    ctx.fillRect(cellX, cellY, CELL_WIDTH - 2, CELL_HEIGHT - 2);
+
+                    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(cellX, cellY, CELL_WIDTH - 2, CELL_HEIGHT - 2);
+                }
+            }
+
+            // Draw Plants
+            plants.forEach(plant => {
+                drawPlant(plant);
+            });
+
+            // Draw Projectiles
+            projectiles.forEach(p => {
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                if (p.type === 'leaf') {
+                    ctx.fillStyle = '#4ade80';
+                    ctx.shadowColor = '#22c55e';
+                    ctx.shadowBlur = 10;
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, 12, 7, Math.PI / 4, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (p.type === 'sun_bullet') {
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.shadowColor = '#f59e0b';
+                    ctx.shadowBlur = 16;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 13, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (p.type === 'shell') {
+                    ctx.fillStyle = '#f97316';
+                    ctx.shadowColor = '#ea580c';
+                    ctx.shadowBlur = 16;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 12, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    ctx.fillStyle = '#38bdf8';
+                    ctx.shadowColor = '#0284c7';
+                    ctx.shadowBlur = 12;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 10, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            });
+
+            // Draw Zombies
+            zombies.forEach(z => {
+                drawZombie(z);
+            });
+
+            // Draw Stage Boss
+            if (boss && boss.active) {
+                drawBoss(boss);
+            }
+
+            // Draw Glowing Suns
+            suns.forEach(s => {
+                drawSun(s);
+            });
+
+            // Draw Particles
+            particles.forEach(pt => {
+                ctx.fillStyle = pt.color;
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw Floating Text
+            floatingTexts.forEach(ft => {
+                ctx.font = 'black 22px Rubik';
+                ctx.fillStyle = ft.color;
+                ctx.textAlign = 'center';
+                ctx.shadowColor = 'rgba(0,0,0,0.85)';
+                ctx.shadowBlur = 6;
+                ctx.fillText(ft.text, ft.x, ft.y);
+                ctx.shadowBlur = 0;
+            });
+
+            ctx.restore();
+        }
+
+        function drawPlant(p) {
+            ctx.save();
+            ctx.translate(p.x, p.y);
+
+            const idleWiggle = Math.sin(globalAnimTime * 4 + p.x) * 2.5;
+
+            if (p.type === 'sunflower') {
+                ctx.strokeStyle = '#15803d';
+                ctx.lineWidth = 7;
+                ctx.beginPath();
+                ctx.moveTo(0, 15);
+                ctx.lineTo(0, 32);
+                ctx.stroke();
+
+                ctx.fillStyle = '#f59e0b';
+                for (let i = 0; i < 12; i++) {
+                    const angle = (i * Math.PI * 2) / 12 + globalAnimTime;
+                    ctx.beginPath();
+                    ctx.arc(Math.cos(angle) * 24, Math.sin(angle) * 24 + idleWiggle, 9, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.fillStyle = '#78350f';
+                ctx.beginPath();
+                ctx.arc(0, idleWiggle, 19, 0, Math.PI * 2);
+                ctx.fill();
+
+            } else if (p.type === 'peashooter') {
+                ctx.strokeStyle = '#16a34a';
+                ctx.lineWidth = 8;
+                ctx.beginPath();
+                ctx.moveTo(0, 15);
+                ctx.lineTo(-5, -10 + idleWiggle);
+                ctx.stroke();
+
+                ctx.fillStyle = '#22c55e';
+                ctx.beginPath();
+                ctx.arc(-2, -15 + idleWiggle, 18, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.ellipse(14, -15 + idleWiggle, 11, 9, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+            } else if (p.type === 'sun_shooter') {
+                ctx.fillStyle = '#fbbf24';
+                for (let i = 0; i < 12; i++) {
+                    const angle = (i * Math.PI * 2) / 12 + globalAnimTime * 1.5;
+                    ctx.beginPath();
+                    ctx.arc(Math.cos(angle) * 26, Math.sin(angle) * 26 + idleWiggle, 10, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.fillStyle = '#22c55e';
+                ctx.beginPath();
+                ctx.arc(-4, idleWiggle, 21, 0, Math.PI * 2);
+                ctx.fill();
+
+            } else if (p.type === 'freezer') {
+                ctx.fillStyle = '#0284c7';
+                ctx.beginPath();
+                ctx.ellipse(0, idleWiggle, 24, 20, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+            } else if (p.type === 'spikemine') {
+                ctx.fillStyle = '#ea580c';
+                ctx.beginPath();
+                ctx.arc(0, 10, 20, 0, Math.PI * 2);
+                ctx.fill();
+
+            } else if (p.type === 'wallnut' || p.type === 'green_wall_shooter') {
+                ctx.fillStyle = p.type === 'green_wall_shooter' ? '#15803d' : '#f97316';
+                ctx.beginPath();
+                ctx.arc(0, idleWiggle, 26, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Draw Ammo Badge in Medium Mode
+            if (selectedDifficulty === 'medium' && p.ammo !== undefined && p.ammo !== Infinity) {
+                ctx.font = 'black 12px Rubik';
+                if (p.ammo > 0) {
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.fillText(`⚡ ${p.ammo}/50`, 0, -38 + idleWiggle);
+                } else {
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fillText('⚠️ ריק!', 0, -38 + idleWiggle);
+                }
+            }
+
+            // Draw Health Bar
+            if (p.hp < p.maxHp) {
+                const hpPct = Math.max(0, p.hp / p.maxHp);
+                ctx.fillStyle = 'rgba(0,0,0,0.65)';
+                ctx.fillRect(-24, 36, 48, 6);
+                ctx.fillStyle = hpPct > 0.5 ? '#22c55e' : '#ef4444';
+                ctx.fillRect(-24, 36, 48 * hpPct, 6);
+            }
+
+            ctx.restore();
+        }
+
+        function drawZombie(z) {
+            ctx.save();
+            ctx.translate(z.x, z.y);
+
+            const bob = Math.sin(z.walkAnim) * 4.5;
+
+            ctx.fillStyle = '#5a8c50';
+            ctx.beginPath();
+            ctx.arc(-2, -30 + bob, 17, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = z.type === 'fast' ? '#dc2626' : (z.type === 'bucket' ? '#475569' : '#2563eb');
+            ctx.fillRect(-15, -16 + bob, 30, 32);
+
+            ctx.restore();
+        }
+
+        function drawBoss(b) {
+            ctx.save();
+            ctx.translate(b.x, b.y);
+
+            if (b.type === 'pirate') {
+                ctx.fillStyle = '#78350f';
+                ctx.fillRect(-50, -120, 100, 240);
+
+                ctx.fillStyle = '#111827';
+                ctx.beginPath();
+                ctx.moveTo(-60, -120);
+                ctx.lineTo(0, -170);
+                ctx.lineTo(60, -120);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillStyle = '#000000';
+                ctx.beginPath();
+                ctx.arc(-15, -95, 10, 0, Math.PI * 2);
+                ctx.fill();
+
+            } else if (b.type === 'electric') {
+                ctx.fillStyle = '#0284c7';
+                ctx.fillRect(-60, -140, 120, 280);
+
+                ctx.fillStyle = '#f59e0b';
+                ctx.beginPath();
+                ctx.arc(-35, -120, 15, 0, Math.PI * 2);
+                ctx.arc(35, -120, 15, 0, Math.PI * 2);
+                ctx.fill();
+
+            } else if (b.type === 'giant') {
+                ctx.fillStyle = '#475569';
+                ctx.fillRect(-75, -170, 150, 340);
+
+                ctx.fillStyle = '#f97316';
+                ctx.beginPath();
+                ctx.arc(0, -110, 25, 0, Math.PI * 2);
+                ctx.fill();
+
+            } else if (b.type === 'colossal') {
+                ctx.fillStyle = '#1e1b4b';
+                ctx.strokeStyle = '#ef4444';
+                ctx.lineWidth = 5;
+                ctx.fillRect(-85, -190, 170, 380);
+                ctx.strokeRect(-85, -190, 170, 380);
+
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.arc(-30, -120, 20, 0, Math.PI * 2);
+                ctx.arc(30, -120, 20, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
+        function drawSun(s) {
+            ctx.save();
+            ctx.translate(s.x, s.y);
+
+            // Outer Sun Ray Petals
+            ctx.fillStyle = '#fbbf24';
+            ctx.shadowColor = '#f59e0b';
+            ctx.shadowBlur = 15;
+
+            const rayCount = 8;
+            for (let i = 0; i < rayCount; i++) {
+                const angle = s.rotation + (i * Math.PI * 2) / rayCount;
+                ctx.beginPath();
+                ctx.arc(Math.cos(angle) * (s.radius + 6), Math.sin(angle) * (s.radius + 6), 7, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Central Glowing Sun Disc
+            const sunGrad = ctx.createRadialGradient(0, 0, 4, 0, 0, s.radius);
+            sunGrad.addColorStop(0, '#fef08a');
+            sunGrad.addColorStop(0.7, '#f59e0b');
+            sunGrad.addColorStop(1, '#d97706');
+
+            ctx.beginPath();
+            ctx.arc(0, 0, s.radius, 0, Math.PI * 2);
+            ctx.fillStyle = sunGrad;
+            ctx.fill();
+
+            // Face Expression
+            ctx.fillStyle = '#78350f';
+            ctx.shadowBlur = 0;
+
+            // Eyes
+            ctx.beginPath();
+            ctx.arc(-6, -4, 2.8, 0, Math.PI * 2);
+            ctx.arc(6, -4, 2.8, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Smiling Mouth
+            ctx.strokeStyle = '#78350f';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.arc(0, 2, 7, 0.1 * Math.PI, 0.9 * Math.PI);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+    </script>
+</body>
+</html>
